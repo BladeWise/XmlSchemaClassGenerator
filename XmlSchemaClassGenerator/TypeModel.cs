@@ -732,7 +732,7 @@ namespace XmlSchemaClassGenerator
             var isNullableValueType = IsNullableValueType;
             var typeReference = TypeReference;
 
-            var requiresBackingField = withDataBinding || DefaultValue != null || IsCollection || isArray;
+            var requiresBackingField = withDataBinding || DefaultValue != null || (!Configuration.GenerateNullablesOnly && (IsCollection || isArray));
             var backingField = new CodeMemberField(typeReference, OwningType.GetUniqueFieldName(this))
             {
                 Attributes = MemberAttributes.Private
@@ -750,7 +750,7 @@ namespace XmlSchemaClassGenerator
             {
                 var propertyName = isNullableValueType && Configuration.GenerateNullables ? Name + "Value" : Name;
 
-                if (IsNillableValueType)
+                if (IsNillableValueType || (Configuration.GenerateNullablesOnly && isNullableValueType))
                 {
                     var nullableType = new CodeTypeReference(typeof(Nullable<>), Configuration.CodeTypeReferenceOptions);
                     nullableType.TypeArguments.Add(typeReference);
@@ -809,84 +809,90 @@ namespace XmlSchemaClassGenerator
 
             if (isNullableValueType)
             {
-                var specifiedName = Configuration.GenerateNullables ? Name + "Value" : Name;
-                var specifiedMember = new CodeMemberField(typeof(bool), specifiedName + "Specified { get; set; }");
-                specifiedMember.CustomAttributes.Add(ignoreAttribute);
-                if (Configuration.EntityFramework && Configuration.GenerateNullables) { specifiedMember.CustomAttributes.Add(notMappedAttribute); }
-                specifiedMember.Attributes = MemberAttributes.Public;
-                var specifiedDocs = new[] { new DocumentationModel { Language = "en", Text = string.Format("Gets or sets a value indicating whether the {0} property is specified.", Name) },
-                    new DocumentationModel { Language = "de", Text = string.Format("Ruft einen Wert ab, der angibt, ob die {0}-Eigenschaft spezifiziert ist, oder legt diesen fest.", Name) } };
-                specifiedMember.Comments.AddRange(DocumentationModel.GetComments(specifiedDocs).ToArray());
-                typeDeclaration.Members.Add(specifiedMember);
-
-                var specifiedMemberPropertyModel = new PropertyModel(Configuration)
+                if (Configuration.GenerateNullablesOnly)
                 {
-                    Name = specifiedName + "Specified"
-                };
+                }
+                else
+                { 
+                    var specifiedName = Configuration.GenerateNullables ? Name + "Value" : Name;
+                    var specifiedMember = new CodeMemberField(typeof(bool), specifiedName + "Specified { get; set; }");
+                    specifiedMember.CustomAttributes.Add(ignoreAttribute);
+                    if (Configuration.EntityFramework && Configuration.GenerateNullables) { specifiedMember.CustomAttributes.Add(notMappedAttribute); }
+                    specifiedMember.Attributes = MemberAttributes.Public;
+                    var specifiedDocs = new[] { new DocumentationModel { Language = "en", Text = string.Format("Gets or sets a value indicating whether the {0} property is specified.", Name) },
+                        new DocumentationModel { Language = "de", Text = string.Format("Ruft einen Wert ab, der angibt, ob die {0}-Eigenschaft spezifiziert ist, oder legt diesen fest.", Name) } };
+                    specifiedMember.Comments.AddRange(DocumentationModel.GetComments(specifiedDocs).ToArray());
+                    typeDeclaration.Members.Add(specifiedMember);
 
-                Configuration.MemberVisitor(specifiedMember, specifiedMemberPropertyModel);
-
-                if (Configuration.GenerateNullables)
-                {
-                    var nullableType = new CodeTypeReference(typeof(Nullable<>), Configuration.CodeTypeReferenceOptions);
-                    nullableType.TypeArguments.Add(typeReference);
-                    var nullableMember = new CodeMemberProperty
+                    var specifiedMemberPropertyModel = new PropertyModel(Configuration)
                     {
-                        Type = nullableType,
-                        Name = Name,
-                        HasSet = true,
-                        HasGet = true,
-                        Attributes = MemberAttributes.Public | MemberAttributes.Final,
+                        Name = specifiedName + "Specified"
                     };
-                    nullableMember.CustomAttributes.Add(ignoreAttribute);
-                    nullableMember.Comments.AddRange(member.Comments);
 
-                    var specifiedExpression = new CodePropertyReferenceExpression(new CodeThisReferenceExpression(), specifiedName + "Specified");
-                    var valueExpression = new CodePropertyReferenceExpression(new CodeThisReferenceExpression(), Name + "Value");
-                    var conditionStatement = new CodeConditionStatement(specifiedExpression,
-                        new CodeStatement[] { new CodeMethodReturnStatement(valueExpression) },
-                        new CodeStatement[] { new CodeMethodReturnStatement(new CodePrimitiveExpression(null)) });
-                    nullableMember.GetStatements.Add(conditionStatement);
+                    Configuration.MemberVisitor(specifiedMember, specifiedMemberPropertyModel);
 
-                    var getValueOrDefaultExpression = new CodeMethodInvokeExpression(new CodePropertySetValueReferenceExpression(), "GetValueOrDefault");
-                    var setValueStatement = new CodeAssignStatement(valueExpression, getValueOrDefaultExpression);
-                    var hasValueExpression = new CodePropertyReferenceExpression(new CodePropertySetValueReferenceExpression(), "HasValue");
-                    var setSpecifiedStatement = new CodeAssignStatement(specifiedExpression, hasValueExpression);
-
-                    var statements = new List<CodeStatement>();
-                    if (withDataBinding)
+                    if (Configuration.GenerateNullables)
                     {
-                        var ifNotEquals = new CodeConditionStatement(
-                            new CodeBinaryOperatorExpression(
-                                new CodeMethodInvokeExpression(valueExpression, "Equals", getValueOrDefaultExpression),
-                                CodeBinaryOperatorType.ValueEquality,
-                                new CodePrimitiveExpression(false)
-                                ),
-                            setValueStatement,
-                            setSpecifiedStatement,
-                            new CodeExpressionStatement(new CodeMethodInvokeExpression(null, "OnPropertyChanged",
-                                new CodePrimitiveExpression(Name)))
-                            );
-                        statements.Add(ifNotEquals);
+                        var nullableType = new CodeTypeReference(typeof(Nullable<>), Configuration.CodeTypeReferenceOptions);
+                        nullableType.TypeArguments.Add(typeReference);
+                        var nullableMember = new CodeMemberProperty
+                        {
+                            Type = nullableType,
+                            Name = Name,
+                            HasSet = true,
+                            HasGet = true,
+                            Attributes = MemberAttributes.Public | MemberAttributes.Final,
+                        };
+                        nullableMember.CustomAttributes.Add(ignoreAttribute);
+                        nullableMember.Comments.AddRange(member.Comments);
+
+                        var specifiedExpression = new CodePropertyReferenceExpression(new CodeThisReferenceExpression(), specifiedName + "Specified");
+                        var valueExpression = new CodePropertyReferenceExpression(new CodeThisReferenceExpression(), Name + "Value");
+                        var conditionStatement = new CodeConditionStatement(specifiedExpression,
+                            new CodeStatement[] { new CodeMethodReturnStatement(valueExpression) },
+                            new CodeStatement[] { new CodeMethodReturnStatement(new CodePrimitiveExpression(null)) });
+                        nullableMember.GetStatements.Add(conditionStatement);
+
+                        var getValueOrDefaultExpression = new CodeMethodInvokeExpression(new CodePropertySetValueReferenceExpression(), "GetValueOrDefault");
+                        var setValueStatement = new CodeAssignStatement(valueExpression, getValueOrDefaultExpression);
+                        var hasValueExpression = new CodePropertyReferenceExpression(new CodePropertySetValueReferenceExpression(), "HasValue");
+                        var setSpecifiedStatement = new CodeAssignStatement(specifiedExpression, hasValueExpression);
+
+                        var statements = new List<CodeStatement>();
+                        if (withDataBinding)
+                        {
+                            var ifNotEquals = new CodeConditionStatement(
+                                new CodeBinaryOperatorExpression(
+                                    new CodeMethodInvokeExpression(valueExpression, "Equals", getValueOrDefaultExpression),
+                                    CodeBinaryOperatorType.ValueEquality,
+                                    new CodePrimitiveExpression(false)
+                                    ),
+                                setValueStatement,
+                                setSpecifiedStatement,
+                                new CodeExpressionStatement(new CodeMethodInvokeExpression(null, "OnPropertyChanged",
+                                    new CodePrimitiveExpression(Name)))
+                                );
+                            statements.Add(ifNotEquals);
+                        }
+                        else
+                        {
+                            statements.Add(setValueStatement);
+                            statements.Add(setSpecifiedStatement);
+                        }
+
+                        nullableMember.SetStatements.AddRange(statements.ToArray());
+
+                        typeDeclaration.Members.Add(nullableMember);
+
+                        var editorBrowsableAttribute = new CodeAttributeDeclaration(new CodeTypeReference(typeof(EditorBrowsableAttribute), Configuration.CodeTypeReferenceOptions));
+                        editorBrowsableAttribute.Arguments.Add(new CodeAttributeArgument(new CodeFieldReferenceExpression(new CodeTypeReferenceExpression(new CodeTypeReference(typeof(EditorBrowsableState), Configuration.CodeTypeReferenceOptions)), "Never")));
+					    specifiedMember.CustomAttributes.Add(editorBrowsableAttribute);
+                        member.CustomAttributes.Add(editorBrowsableAttribute);
+                        if (Configuration.EntityFramework) { member.CustomAttributes.Add(notMappedAttribute); }
                     }
-                    else
-                    {
-                        statements.Add(setValueStatement);
-                        statements.Add(setSpecifiedStatement);
-                    }
-
-                    nullableMember.SetStatements.AddRange(statements.ToArray());
-
-                    typeDeclaration.Members.Add(nullableMember);
-
-                    var editorBrowsableAttribute = new CodeAttributeDeclaration(new CodeTypeReference(typeof(EditorBrowsableAttribute), Configuration.CodeTypeReferenceOptions));
-                    editorBrowsableAttribute.Arguments.Add(new CodeAttributeArgument(new CodeFieldReferenceExpression(new CodeTypeReferenceExpression(new CodeTypeReference(typeof(EditorBrowsableState), Configuration.CodeTypeReferenceOptions)), "Never")));
-					specifiedMember.CustomAttributes.Add(editorBrowsableAttribute);
-                    member.CustomAttributes.Add(editorBrowsableAttribute);
-                    if (Configuration.EntityFramework) { member.CustomAttributes.Add(notMappedAttribute); }
                 }
             }
-            else if ((IsCollection || isArray || (IsList && IsAttribute)) && IsNullable)
+            else if ((IsCollection || isArray || (IsList && IsAttribute)) && IsNullable && !Configuration.GenerateNullablesOnly)
             {
                 var specifiedProperty = new CodeMemberProperty
                 {

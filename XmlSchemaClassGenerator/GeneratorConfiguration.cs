@@ -91,6 +91,10 @@ namespace XmlSchemaClassGenerator
         /// </summary>
         public bool GenerateNullables { get; set; }
         /// <summary>
+        /// Generate only Nullable members for optional elements?
+        /// </summary>
+        public bool GenerateNullablesOnly { get; set; }
+        /// <summary>
         /// Generate the Serializable attribute?
         /// </summary>
         public bool GenerateSerializableAttribute { get; set; }

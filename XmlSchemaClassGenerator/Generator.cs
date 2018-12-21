@@ -8,6 +8,8 @@ using System.Xml.Schema;
 
 namespace XmlSchemaClassGenerator
 {
+    using System.Collections;
+
     public class Generator
     {
         private readonly GeneratorConfiguration _configuration = new GeneratorConfiguration();
@@ -98,6 +100,12 @@ namespace XmlSchemaClassGenerator
         {
             get { return _configuration.GenerateNullables; }
             set { _configuration.GenerateNullables = value; }
+        }
+
+        public bool GenerateNullablesOnly
+        {
+            get { return _configuration.GenerateNullablesOnly; }
+            set { _configuration.GenerateNullablesOnly = value; }
         }
 
         public bool GenerateSerializableAttribute
@@ -199,23 +207,76 @@ namespace XmlSchemaClassGenerator
             set { _configuration.EnableUpaCheck = value; }
         }
 
+        private XmlSchemaSet MergeSchemas(IEnumerable<string> files)
+        {
+            var settings = new XmlReaderSettings
+                           {
+                                   DtdProcessing = DtdProcessing.Ignore
+                           };
+            var schemaSet = new XmlSchemaSet();
+
+            var entries = files.Select(f =>
+                                       {
+                                           var xsd = XmlSchema.Read(XmlReader.Create(f, settings), (s, e) => { Trace.TraceError(e.Message); });
+                                           var innerSchemaSet = new XmlSchemaSet();
+                                           innerSchemaSet.Add(xsd.TargetNamespace, xsd.SourceUri);
+                                           innerSchemaSet.Compile();
+                                           return new
+                                                  {
+                                                          xsd.SourceUri,
+                                                          SchemaSet = innerSchemaSet
+                                                  };
+                                       })
+                               .ToList();
+
+            foreach (var entry in entries)
+            {
+                var needsReprocess = false;
+                foreach (var element in entry.SchemaSet.GlobalElements.Values.Cast<XmlSchemaElement>())
+                {
+                    if (schemaSet.GlobalElements.Contains(element.QualifiedName))
+                    {
+                        ((XmlSchema)element.Parent).Items.Remove(element);
+                        needsReprocess = true;
+                        break;
+                    }
+                }
+
+                if (needsReprocess)
+                {
+                    foreach (XmlSchema schema in entry.SchemaSet.Schemas())
+                    {
+                        entry.SchemaSet.Reprocess(schema);
+                    }
+
+                    entry.SchemaSet.Compile();
+                }
+
+                schemaSet.Add(entry.SchemaSet);
+            }
+
+            return schemaSet;
+        }
+
         public void Generate(IEnumerable<string> files)
         {
-            var set = new XmlSchemaSet();
-            var settings = new XmlReaderSettings
-            {
-                DtdProcessing = DtdProcessing.Ignore
-            };
+            var set = MergeSchemas(files);
+            //var set = new XmlSchemaSet();
 
-            var schemas = files.Select(f => XmlSchema.Read(XmlReader.Create(f, settings), (s, e) =>
-            {
-                Trace.TraceError(e.Message);
-            }));
+            //var settings = new XmlReaderSettings
+            //{
+            //    DtdProcessing = DtdProcessing.Ignore
+            //};
 
-            foreach (var s in schemas)
-            {
-                set.Add(s.TargetNamespace, s.SourceUri);
-            }
+            //var schemas = files.Select(f => XmlSchema.Read(XmlReader.Create(f, settings), (s, e) =>
+            //{
+            //    Trace.TraceError(e.Message);
+            //}));
+
+            //foreach (var s in schemas)
+            //{
+            //    set.Add(s.TargetNamespace, s.SourceUri);
+            //}
 
             Generate(set);
         }

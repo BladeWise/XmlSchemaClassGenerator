@@ -24,6 +24,7 @@ namespace XmlSchemaClassGenerator.Console
             var namespacePrefix = "";
             var verbose = false;
             var nullables = false;
+            var nullablesOnly = false;
             var pclCompatible = false;
             var enableDataBinding = false;
             var emitOrder = false;
@@ -72,6 +73,7 @@ If no mapping is found for an XML namespace, a name is generated automatically (
                 { "p|prefix=", "the {PREFIX} to prepend to auto-generated namespace names", v => namespacePrefix = v },
                 { "v|verbose", "print generated file names on stdout", v => verbose = v != null },
                 { "0|nullable", "generate nullable adapter properties for optional elements/attributes w/o default values", v => nullables = v != null },
+                { "00|nullableOnly", "generate only nullable adapter properties for optional elements/attributes w/o default values", v => nullablesOnly = v != null },
                 { "f|ef", "generate Entity Framework Code First compatible classes", v => entityFramework = v != null },
                 { "t|interface", "generate interfaces for groups and attribute groups (default is enabled)", v => interfaces = v != null },
                 { "a|pascal", "use Pascal case for class and property names (default is enabled)", v => pascal = v != null },
@@ -115,6 +117,7 @@ If no mapping is found for an XML namespace, a name is generated automatically (
                 NamespaceProvider = namespaceMap,
                 OutputFolder = outputFolder,
                 GenerateNullables = nullables,
+                GenerateNullablesOnly = nullablesOnly,
                 EnableDataBinding = enableDataBinding,
                 EmitOrder = emitOrder,
                 IntegerDataType = integerType,
